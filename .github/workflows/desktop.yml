@@ -64,6 +64,8 @@ jobs:
           scripts/build-php.sh "$PHP_VERSION" 2>&1 | tee "$RUNNER_TEMP/build-php.log"
         env:
           SPC_WORKDIR: ${{ runner.temp }}/spc
+          # static-php-cli interroge l'API GitHub : sans jeton, il est vite limité (403).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compilation du binaire PHP (Windows)
         if: steps.php-bin.outputs.cache-hit != 'true' && matrix.os == 'win'
@@ -73,6 +75,7 @@ jobs:
           exit $LASTEXITCODE
         env:
           SPC_WORKDIR: C:\spc
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - run: composer install --no-interaction --prefer-dist
       - run: npm ci
@@ -110,7 +113,8 @@ jobs:
         run: |
           set -o pipefail
           php artisan native:build ${{ matrix.os }} ${{ matrix.arch }} --no-interaction 2>&1 | tee "$RUNNER_TEMP/native-build.log"
-          ls nativephp/electron/dist/*.{dmg,zip,exe,AppImage,deb} 2>/dev/null | grep -q . || { echo "Aucun installeur produit dans nativephp/electron/dist"; exit 1; }
+          find nativephp/electron/dist -maxdepth 1 \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' \) | grep -q . \
+            || { echo "Aucun installeur produit dans nativephp/electron/dist"; exit 1; }
         env:
           NATIVEPHP_PHP_BINARY_PATH: nativephp/php-bin/
           CSC_LINK: ${{ matrix.os == 'mac' && secrets.CSC_LINK || '' }}
@@ -136,7 +140,7 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          for f in "$RUNNER_TEMP/build-php.log" "$SPC_WORKDIR"/log/spc.output.log "$RUNNER_TEMP/native-build.log"; do
+          for f in "$RUNNER_TEMP/build-php.log" "$SPC_WORKDIR"/log/spc.output.log "$SPC_WORKDIR"/log/spc.shell.log "$RUNNER_TEMP/native-build.log"; do
             [ -f "$f" ] || continue
             msg=$(tail -n 40 "$f" | perl -pe 's/\e\[[0-9;]*m//g; s/\r//g; s/%/%25/g; s/\n/%0A/g')
             echo "::error title=$(basename "$f")::$msg"
