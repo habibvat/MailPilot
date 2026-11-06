@@ -29,7 +29,8 @@ jobs:
       matrix:
         include:
           - { runner: macos-latest, os: mac, arch: arm64 }
-          - { runner: windows-latest, os: win, arch: x64 }
+          # static-php-cli 2.8.5 ne reconnaît que Visual Studio 2019 / 2022.
+          - { runner: windows-2022, os: win, arch: x64 }
           - { runner: ubuntu-latest, os: linux, arch: x64 }
 
     steps:
@@ -73,20 +74,6 @@ jobs:
         env:
           SPC_WORKDIR: C:\spc
 
-      # Les logs d'Actions ne sont lisibles qu'authentifié : en cas d'échec, la fin du log
-      # de compilation est publiée en annotation, visible sur la page du run.
-      - name: Résumé de l'échec de compilation
-        if: failure() && steps.php-bin.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          for f in "$RUNNER_TEMP/build-php.log" "$SPC_WORKDIR"/log/spc.output.log; do
-            [ -f "$f" ] || continue
-            msg=$(tail -n 40 "$f" | perl -pe 's/\e\[[0-9;]*m//g; s/\r//g; s/%/%25/g; s/\n/%0A/g')
-            echo "::error title=$(basename "$f")::$msg"
-          done
-        env:
-          SPC_WORKDIR: ${{ matrix.os == 'win' && 'C:\spc' || format('{0}/spc', runner.temp) }}
-
       - run: composer install --no-interaction --prefer-dist
       - run: npm ci
 
@@ -116,8 +103,14 @@ jobs:
             echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
           fi
 
+      # native:build ne renvoie pas toujours d'erreur quand electron-builder échoue :
+      # on vérifie que des installeurs ont bien été produits.
       - name: Construction de l'application
-        run: php artisan native:build ${{ matrix.os }} ${{ matrix.arch }} --no-interaction
+        shell: bash
+        run: |
+          set -o pipefail
+          php artisan native:build ${{ matrix.os }} ${{ matrix.arch }} --no-interaction 2>&1 | tee "$RUNNER_TEMP/native-build.log"
+          ls nativephp/electron/dist/*.{dmg,zip,exe,AppImage,deb} 2>/dev/null | grep -q . || { echo "Aucun installeur produit dans nativephp/electron/dist"; exit 1; }
         env:
           NATIVEPHP_PHP_BINARY_PATH: nativephp/php-bin/
           CSC_LINK: ${{ matrix.os == 'mac' && secrets.CSC_LINK || '' }}
@@ -136,6 +129,20 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$app"
           xcrun stapler validate "$app"
           spctl --assess --type execute --verbose "$app"
+
+      # Les logs d'Actions ne sont lisibles qu'authentifié : en cas d'échec, la fin du log
+      # de compilation est publiée en annotation, visible sur la page du run.
+      - name: Résumé de l'échec
+        if: failure()
+        shell: bash
+        run: |
+          for f in "$RUNNER_TEMP/build-php.log" "$SPC_WORKDIR"/log/spc.output.log "$RUNNER_TEMP/native-build.log"; do
+            [ -f "$f" ] || continue
+            msg=$(tail -n 40 "$f" | perl -pe 's/\e\[[0-9;]*m//g; s/\r//g; s/%/%25/g; s/\n/%0A/g')
+            echo "::error title=$(basename "$f")::$msg"
+          done
+        env:
+          SPC_WORKDIR: ${{ matrix.os == 'win' && 'C:\spc' || format('{0}/spc', runner.temp) }}
 
       - uses: actions/upload-artifact@v4
         with:
