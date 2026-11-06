@@ -1,0 +1,92 @@
+# Construit l'application desktop (NativePHP) pour macOS, Windows et Linux.
+# Lancement manuel (onglet Actions) ou à chaque tag v* (ex. v1.0.0).
+name: Desktop
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+env:
+  # Doit rester aligné sur config.platform.php (composer.json).
+  PHP_VERSION: '8.3'
+
+jobs:
+  build:
+    name: ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-latest, os: mac, arch: arm64 }
+          - { runner: windows-latest, os: win, arch: x64 }
+          - { runner: ubuntu-latest, os: linux, arch: x64 }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: zip, gd, intl, sqlite3, pdo_sqlite
+          tools: composer:v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Le binaire PHP embarqué (avec xmlreader / xmlwriter) ne dépend que de ces
+      # scripts : il n'est recompilé que s'ils changent.
+      - name: Cache du binaire PHP
+        id: php-bin
+        uses: actions/cache@v4
+        with:
+          path: nativephp/php-bin
+          key: php-bin-${{ matrix.os }}-${{ matrix.arch }}-${{ env.PHP_VERSION }}-${{ hashFiles('scripts/build-php.*') }}
+
+      - name: Compilation du binaire PHP (macOS / Linux)
+        if: steps.php-bin.outputs.cache-hit != 'true' && matrix.os != 'win'
+        run: scripts/build-php.sh "$PHP_VERSION"
+        env:
+          SPC_WORKDIR: ${{ runner.temp }}/spc
+
+      - name: Compilation du binaire PHP (Windows)
+        if: steps.php-bin.outputs.cache-hit != 'true' && matrix.os == 'win'
+        shell: pwsh
+        run: scripts/build-php.ps1 -PhpVersion $env:PHP_VERSION
+        env:
+          SPC_WORKDIR: C:\spc
+
+      - run: composer install --no-interaction --prefer-dist
+      - run: npm ci
+
+      - name: Préparation du .env et de la version
+        shell: bash
+        run: |
+          cp .env.example .env
+          # En debug, NativePHP garde la base et le stockage dans le paquet au lieu du
+          # dossier de données de l'utilisateur : l'application livrée doit être en production.
+          php -r '$e = file_get_contents(".env"); $e = preg_replace(["/^APP_ENV=.*/m", "/^APP_DEBUG=.*/m"], ["APP_ENV=production", "APP_DEBUG=false"], $e); file_put_contents(".env", $e);'
+          grep -qx 'APP_DEBUG=false' .env
+          php artisan key:generate --force
+          # Tag v1.2.3 → version 1.2.3 ; lancement manuel → 0.0.0-dev.
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="0.0.0-dev"; fi
+          echo "NATIVEPHP_APP_VERSION=$v" >> "$GITHUB_ENV"
+
+      - name: Construction de l'application
+        run: php artisan native:build ${{ matrix.os }} ${{ matrix.arch }} --no-interaction
+        env:
+          NATIVEPHP_PHP_BINARY_PATH: nativephp/php-bin/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MailPilot-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            nativephp/electron/dist/*.dmg
+            nativephp/electron/dist/*.zip
+            nativephp/electron/dist/*.exe
+            nativephp/electron/dist/*.AppImage
+            nativephp/electron/dist/*.deb
+          if-no-files-found: error
