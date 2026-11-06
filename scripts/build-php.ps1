@@ -7,7 +7,10 @@ param([string]$PhpVersion = "")
 $ErrorActionPreference = "Stop"
 
 $SpcVersion = "2.8.5"
-$Extensions = "bcmath,bz2,ctype,curl,dom,fileinfo,filter,gd,iconv,intl,mbstring,opcache,openssl,pdo,pdo_sqlite,phar,session,simplexml,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib"
+# Sans intl : avec static-php-cli 2.8.5, ICU 79 ne compile pas avec PHP 8.3 sous MSVC (C++17
+# requis). MailPilot n'en dépend pas (polyfills Symfony / portable-ascii) ; la CI le vérifie
+# en lançant les tests avec ce binaire.
+$Extensions = "bcmath,bz2,ctype,curl,dom,fileinfo,filter,gd,iconv,mbstring,opcache,openssl,pdo,pdo_sqlite,phar,session,simplexml,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib"
 
 $Root = Resolve-Path "$PSScriptRoot\.."
 if (-not $PhpVersion) { $PhpVersion = (php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;') }
