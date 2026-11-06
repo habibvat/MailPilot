@@ -10,8 +10,9 @@
 set -euo pipefail
 
 SPC_VERSION="2.8.5"
-# Extensions du binaire officiel NativePHP, plus xmlreader et xmlwriter.
-EXTENSIONS="bcmath,bz2,ctype,curl,dom,fileinfo,filter,gd,iconv,intl,mbstring,opcache,openssl,pdo,pdo_sqlite,phar,session,simplexml,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib"
+# Extensions du binaire officiel NativePHP (dont mbregex : mb_split, utilisé par Laravel),
+# plus xmlreader et xmlwriter.
+EXTENSIONS="bcmath,bz2,ctype,curl,dom,fileinfo,filter,gd,iconv,intl,mbregex,mbstring,opcache,openssl,pdo,pdo_sqlite,phar,session,simplexml,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PHP_VERSION="${1:-$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')}"
@@ -56,6 +57,8 @@ MODULES="$("$BIN" -m)"
 for ext in xmlreader xmlwriter zip gd pdo_sqlite; do
     grep -qix "$ext" <<< "$MODULES" || { echo "Extension manquante dans le binaire : $ext" >&2; exit 1; }
 done
+# mbregex n'apparaît pas dans « php -m » : on vérifie mb_split, utilisé par Str::studly.
+"$BIN" -r 'exit(function_exists("mb_split") ? 0 : 1);' || { echo "mbregex absent (mb_split)" >&2; exit 1; }
 
 rm -f "$OUT/php-$PHP_VERSION.zip"
 (cd "$WORK/buildroot/bin" && zip -q "$OUT/php-$PHP_VERSION.zip" php)
