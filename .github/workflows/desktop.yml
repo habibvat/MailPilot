@@ -1,11 +1,20 @@
 # Construit l'application desktop (NativePHP) pour macOS, Windows et Linux.
 # Lancement manuel (onglet Actions) ou à chaque tag v* (ex. v1.0.0).
+#
+# Signature macOS (facultative : sans ces secrets, l'app est construite non signée) :
+#   CSC_LINK              certificat « Developer ID Application » exporté en .p12, encodé en base64
+#   CSC_KEY_PASSWORD      mot de passe du .p12
+#   APPLE_ID              identifiant Apple du compte développeur
+#   APPLE_APP_PASSWORD    mot de passe d'application (appleid.apple.com → Mots de passe d'app)
+#   APPLE_TEAM_ID         Team ID (developer.apple.com → Membership)
 name: Desktop
 
 on:
   workflow_dispatch:
   push:
     tags: ['v*']
+    # TEMPORAIRE : validation de la branche, à retirer avant la fusion dans main.
+    branches: [feature/desktop]
 
 env:
   # Doit rester aligné sur config.platform.php (composer.json).
@@ -75,10 +84,39 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="0.0.0-dev"; fi
           echo "NATIVEPHP_APP_VERSION=$v" >> "$GITHUB_ENV"
 
+      - name: Signature macOS
+        if: matrix.os == 'mac'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+        run: |
+          if [ -n "$CSC_LINK" ]; then
+            echo "MAC_SIGNED=true" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Secrets de signature absents : application macOS non signée."
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+          fi
+
       - name: Construction de l'application
         run: php artisan native:build ${{ matrix.os }} ${{ matrix.arch }} --no-interaction
         env:
           NATIVEPHP_PHP_BINARY_PATH: nativephp/php-bin/
+          CSC_LINK: ${{ matrix.os == 'mac' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.os == 'mac' && secrets.CSC_KEY_PASSWORD || '' }}
+          NATIVEPHP_APPLE_ID: ${{ secrets.APPLE_ID }}
+          NATIVEPHP_APPLE_ID_PASS: ${{ secrets.APPLE_APP_PASSWORD }}
+          NATIVEPHP_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      # Le script de notarisation de NativePHP ignore ses erreurs : on vérifie nous-mêmes
+      # que Gatekeeper accepte l'application signée et notarisée.
+      - name: Vérification de la notarisation
+        if: matrix.os == 'mac' && env.MAC_SIGNED == 'true'
+        shell: bash
+        run: |
+          app=$(find nativephp/electron/dist -maxdepth 2 -name '*.app' | head -1)
+          codesign --verify --deep --strict --verbose=2 "$app"
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose "$app"
 
       - uses: actions/upload-artifact@v4
         with:
