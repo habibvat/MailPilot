@@ -70,7 +70,10 @@ class CampaignManager
     public function resume(Campaign $campaign): void
     {
         $this->expect($campaign, ['paused', 'stopped']);
-        $campaign->update(['status' => 'running', 'stop_reason' => null, 'consecutive_failures' => 0, 'next_send_at' => null]);
+        $stopped = $campaign->status === 'stopped';
+        $campaign->update(['status' => 'running', 'stop_reason' => null, 'consecutive_failures' => 0, 'next_send_at' => null]
+            // Après un arrêt, le taux de rebond repart de zéro : sinon l'historique déclencherait de nouveau le disjoncteur.
+            + ($stopped ? ['breaker_reset_at' => now()] : []));
 
         // Si la cause d'un arrêt automatique est toujours présente, la campagne est de nouveau arrêtée.
         if ($this->breaker->check($campaign)) {

@@ -51,7 +51,7 @@ class Wizard extends Component
     public function mount(?Campaign $campaign = null)
     {
         if ($campaign?->exists) {
-            if ($campaign->status !== 'draft') {
+            if (! $campaign->isEditable()) {
                 return $this->redirectRoute('campaigns.show', $campaign, navigate: true);
             }
             $this->campaign = $campaign;
@@ -126,13 +126,17 @@ class Wizard extends Component
             }
         }
 
+        // Les destinataires d'une campagne démarrée sont figés : son segment n'est plus modifié.
+        $current = $this->campaign?->fresh();
+        $started = $current?->isStarted() ?? false;
+        if ($current && ! $current->isEditable()) {
+            $this->dispatch('notify', type: 'error', message: __('Une campagne terminée ne peut plus être modifiée.'));
+
+            return null;
+        }
+
         $data = [
             'name' => $this->name,
-            'segment_filters' => array_filter([
-                'sector' => array_values($this->sectors),
-                'wilaya' => array_values($this->wilayas),
-                'tag' => array_values($this->tags),
-            ]),
             'template_id' => $this->template_id,
             'smtp_account_id' => $this->smtp_account_id,
             'hourly_limit' => $this->hourly_limit,
@@ -143,10 +147,17 @@ class Wizard extends Component
             'min_delay' => $this->min_delay,
             'max_delay' => $this->max_delay,
         ];
+        if (! $started) {
+            $data['segment_filters'] = array_filter([
+                'sector' => array_values($this->sectors),
+                'wilaya' => array_values($this->wilayas),
+                'tag' => array_values($this->tags),
+            ]);
+        }
 
         $campaign = $this->campaign ? tap($this->campaign)->update($data) : Campaign::create($data + ['status' => 'draft']);
 
-        if ($start) {
+        if ($start && ! $started) {
             try {
                 $count = app(CampaignManager::class)->start($campaign->fresh());
                 session()->flash('notify', __('Campagne démarrée : :count contact(s) en file d\'envoi.', ['count' => $count]));
@@ -157,7 +168,7 @@ class Wizard extends Component
                 return null;
             }
         } else {
-            session()->flash('notify', __('Brouillon enregistré.'));
+            session()->flash('notify', $started ? __('Campagne mise à jour : les nouveaux réglages s\'appliquent aux prochains envois.') : __('Brouillon enregistré.'));
         }
 
         return $this->redirectRoute('campaigns.show', $campaign, navigate: true);
@@ -169,6 +180,8 @@ class Wizard extends Component
         $account = SmtpAccount::find($this->smtp_account_id);
 
         return view('livewire.campaigns.wizard', [
+            'started' => $this->campaign?->isStarted() ?? false,
+            'recipientCount' => $this->campaign?->isStarted() ? $this->campaign->sends()->count() : 0,
             'segmentCount' => $audience->segment($filters)->count(),
             'eligibleCount' => $audience->eligible($filters)->count(),
             'sectorOptions' => Contact::distinctValues('sector'),

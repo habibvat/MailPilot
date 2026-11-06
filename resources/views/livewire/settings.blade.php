@@ -28,7 +28,7 @@
         <form wire:submit="saveDefaults" class="card card-body space-y-4">
             <div>
                 <h2 class="text-sm font-semibold text-slate-900">{{ __('Quotas par défaut') }}</h2>
-                <p class="mt-1 text-sm text-slate-500">{{ __('Valeurs proposées à la création d\'un compte SMTP ou d\'une campagne.') }}</p>
+                <p class="mt-1 text-sm text-slate-500">{{ __('Valeurs proposées à la création d\'un compte SMTP ou d\'une campagne. Les comptes et campagnes existants gardent leurs propres quotas : modifiez-les depuis leur page.') }}</p>
             </div>
             <div class="grid gap-4 sm:grid-cols-2">
                 <div>

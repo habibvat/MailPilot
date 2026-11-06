@@ -21,7 +21,7 @@ class Campaign extends Model
     protected $fillable = [
         'name', 'template_id', 'smtp_account_id', 'segment_filters', 'hourly_limit',
         'daily_limit', 'send_days', 'send_start', 'send_end', 'min_delay', 'max_delay',
-        'status', 'stop_reason', 'consecutive_failures', 'next_send_at', 'started_at', 'completed_at',
+        'status', 'stop_reason', 'consecutive_failures', 'breaker_reset_at', 'next_send_at', 'started_at', 'completed_at',
     ];
 
     protected function casts(): array
@@ -34,6 +34,7 @@ class Campaign extends Model
             'min_delay' => 'integer',
             'max_delay' => 'integer',
             'consecutive_failures' => 'integer',
+            'breaker_reset_at' => 'datetime',
             'next_send_at' => 'datetime',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
@@ -58,6 +59,17 @@ class Campaign extends Model
     public function isRunning(): bool
     {
         return $this->status === 'running';
+    }
+
+    /** Une campagne démarrée garde ses destinataires mais ses réglages d'envoi restent modifiables. */
+    public function isEditable(): bool
+    {
+        return $this->status !== 'completed';
+    }
+
+    public function isStarted(): bool
+    {
+        return $this->status !== 'draft';
     }
 
     /**

@@ -1,5 +1,5 @@
 <div>
-    <x-page-header :title="$campaign ? 'Modifier la campagne' : 'Nouvelle campagne'" :subtitle="__('Les contacts éligibles sont figés au démarrage de la campagne.')">
+    <x-page-header :title="$campaign ? __('Modifier la campagne') : __('Nouvelle campagne')" :subtitle="$started ? __('Campagne démarrée : les destinataires sont figés, les autres réglages s\'appliquent aux prochains envois.') : __('Les contacts éligibles sont figés au démarrage de la campagne.')">
         <x-slot:actions>
             <a href="{{ $campaign ? route('campaigns.show', $campaign) : route('campaigns.index') }}" wire:navigate class="btn-secondary">{{ __('Annuler') }}</a>
         </x-slot:actions>
@@ -27,6 +27,15 @@
                         <input type="text" wire:model="name" class="input" placeholder="{{ __('Ex. Offre BTP – Alger et Blida') }}">
                         @error('name') <p class="error">{{ $message }}</p> @enderror
                     </div>
+                    @if ($started)
+                        <div class="rounded-md bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            <p class="mb-2">{{ __('Le segment ne peut plus être modifié : les destinataires ont été figés au démarrage. Pour cibler d\'autres contacts, créez une nouvelle campagne.') }}</p>
+                            @foreach (['sectors' => 'Secteurs', 'wilayas' => 'Régions', 'tags' => 'Tags'] as $key => $label)
+                                @if (! empty($this->{$key}))<div class="font-medium text-slate-900">{{ __(':label : :value', ['label' => __($label), 'value' => implode(', ', $this->{$key})]) }}</div>@endif
+                            @endforeach
+                            @if (empty($sectors) && empty($wilayas) && empty($tags))<div class="font-medium text-slate-900">{{ __('Tous les contacts éligibles') }}</div>@endif
+                        </div>
+                    @else
                     <p class="text-sm text-slate-500">{{ __('Laissez une liste vide pour ne pas filtrer sur ce critère. Plusieurs valeurs cochées = l\'une ou l\'autre.') }}</p>
                     <div class="grid gap-4 md:grid-cols-3">
                         <div>
@@ -42,6 +51,7 @@
                             <x-checkbox-list model="tags" :options="$tagOptions" :empty="__('Aucun tag. Ajoutez-en depuis la page Contacts.')" />
                         </div>
                     </div>
+                    @endif
                 </div>
             @elseif ($step === 2)
                 <div class="space-y-5">
@@ -75,16 +85,21 @@
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div>
                             <label class="label">{{ __('Quota horaire de la campagne') }}</label>
-                            <input type="number" min="1" wire:model="hourly_limit" class="input">
+                            <input type="number" min="1" wire:model.blur="hourly_limit" class="input">
                             @error('hourly_limit') <p class="error">{{ $message }}</p> @enderror
                         </div>
                         <div>
                             <label class="label">{{ __('Quota journalier de la campagne') }}</label>
-                            <input type="number" min="1" wire:model="daily_limit" class="input">
+                            <input type="number" min="1" wire:model.blur="daily_limit" class="input">
                             @error('daily_limit') <p class="error">{{ $message }}</p> @enderror
                         </div>
                     </div>
-                    @if ($account)
+                    @if ($account && ((int) $hourly_limit > $account->hourly_limit || (int) $daily_limit > $account->daily_limit))
+                        <div class="-mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                            {{ __('Le compte « :label » est limité à :hourly/h et :daily/jour : la campagne n\'enverra pas plus, quels que soient les quotas ci-dessus.', ['label' => $account->label, 'hourly' => $account->hourly_limit, 'daily' => $account->daily_limit]) }}
+                            <a href="{{ route('smtp.edit', $account) }}" target="_blank" class="font-medium underline">{{ __('Modifier les quotas du compte') }}</a>
+                        </div>
+                    @elseif ($account)
                         <p class="help -mt-3">{{ __('Le compte « :label » est limité à :hourly/h et :daily/jour, toutes campagnes confondues : la limite la plus basse s\'applique.', ['label' => $account->label, 'hourly' => $account->hourly_limit, 'daily' => $account->daily_limit]) }}</p>
                     @endif
                     <div>
@@ -132,6 +147,8 @@
                 <div class="flex gap-2">
                     @if ($step < 3)
                         <button type="button" wire:click="next" class="btn-primary">{{ __('Suivant') }}</button>
+                    @elseif ($started)
+                        <button type="button" wire:click="save(false)" class="btn-primary">{{ __('Enregistrer les modifications') }}</button>
                     @else
                         <button type="button" wire:click="save(false)" class="btn-secondary">{{ __('Enregistrer le brouillon') }}</button>
                         <button type="button" wire:click="save(true)" wire:confirm="{{ __('Démarrer la campagne pour :count contact(s) éligible(s) ?', ['count' => $eligibleCount]) }}" class="btn-primary">{{ __('Enregistrer et démarrer') }}</button>
@@ -142,6 +159,13 @@
 
         {{-- Compteur --}}
         <div class="space-y-4">
+            @if ($started)
+            <div class="card card-body">
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('Destinataires') }}</div>
+                <div class="mt-1 text-3xl font-semibold tabular-nums text-slate-900">{{ number_format($recipientCount, 0, ',', ' ') }}</div>
+                <div class="mt-1 text-sm text-slate-500">{{ __('figés au démarrage de la campagne') }}</div>
+            </div>
+            @else
             <div class="card card-body">
                 <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('Contacts éligibles') }}</div>
                 <div class="mt-1 text-3xl font-semibold tabular-nums text-slate-900" wire:loading.class="opacity-50">{{ number_format($eligibleCount, 0, ',', ' ') }}</div>
@@ -153,7 +177,8 @@
                     <li>{{ __('✓ non contacté depuis :days jours', ['days' => config('mailpilot.recontact_days')]) }}</li>
                 </ul>
             </div>
-            @if ($eligibleCount > 0 && $daily_limit > 0)
+            @endif
+            @if (! $started && $eligibleCount > 0 && $daily_limit > 0)
                 <div class="card card-body text-sm text-slate-600">
                     {!! __('Au rythme de :rate emails par jour d\'envoi, il faudra environ <strong>:days jour(s) d\'envoi</strong>.', [
                         'rate' => min($daily_limit, $account?->daily_limit ?? $daily_limit),

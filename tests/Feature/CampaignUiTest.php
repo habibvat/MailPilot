@@ -74,3 +74,56 @@ it('affiche les pages campagnes', function () {
     $this->get("/campagnes/{$campaign->id}/modifier")->assertOk();
     Livewire::test(Show::class, ['campaign' => $campaign])->assertSee('Journal des envois');
 });
+
+it('prévient quand les quotas de la campagne dépassent ceux du compte SMTP', function () {
+    $account = SmtpAccount::create(['label' => 'Petit compte', 'host' => 'h', 'port' => 587, 'encryption' => 'tls', 'from_name' => 'M', 'from_email' => 'm@m.dz', 'hourly_limit' => 10, 'daily_limit' => 30]);
+
+    Livewire::test(\App\Livewire\Campaigns\Wizard::class)
+        ->set('smtp_account_id', $account->id)
+        ->set('step', 3)
+        ->set('hourly_limit', 10)
+        ->set('daily_limit', 30)
+        ->assertDontSee('la campagne n\'enverra pas plus')
+        ->set('hourly_limit', 100)
+        ->set('daily_limit', 500)
+        ->assertSee('Le compte « Petit compte » est limité à 10/h et 30/jour : la campagne n\'enverra pas plus');
+});
+
+it('modifie les réglages d\'une campagne démarrée sans toucher à ses destinataires', function () {
+    $campaign = Campaign::create(['name' => 'En cours', 'template_id' => Template::value('id'), 'smtp_account_id' => SmtpAccount::value('id'), 'segment_filters' => ['sector' => ['BTP']], 'send_days' => [1, 2, 3, 4, 5]]);
+    app(\App\Services\Campaigns\CampaignManager::class)->start($campaign->fresh());
+    $other = Template::create(['name' => 'T2', 'subject' => 'S2', 'body_html' => 'B2']);
+
+    Livewire::test(Wizard::class, ['campaign' => $campaign->fresh()])
+        ->assertSee('Le segment ne peut plus être modifié')
+        ->set('step', 3)
+        ->assertSee('Enregistrer les modifications')
+        ->assertDontSee('Enregistrer et démarrer')
+        ->set('name', 'Renommée')
+        ->set('sectors', ['Santé'])
+        ->set('template_id', $other->id)
+        ->set('hourly_limit', 5)
+        ->set('send_days', [6, 7])
+        ->set('send_start', '10:00')
+        ->set('send_end', '12:00')
+        ->call('save')
+        ->assertRedirect(route('campaigns.show', $campaign));
+
+    $campaign->refresh();
+    expect($campaign->status)->toBe('running')
+        ->and($campaign->name)->toBe('Renommée')
+        ->and($campaign->template_id)->toBe($other->id)
+        ->and($campaign->hourly_limit)->toBe(5)
+        ->and($campaign->send_days)->toBe([6, 7])
+        ->and($campaign->send_start)->toBe('10:00')
+        ->and($campaign->segment_filters)->toBe(['sector' => ['BTP']])
+        ->and($campaign->sends()->count())->toBe(1);
+
+    Livewire::test(Show::class, ['campaign' => $campaign])->assertSee(route('campaigns.edit', $campaign));
+});
+
+it('ne permet plus de modifier une campagne terminée', function () {
+    $campaign = Campaign::create(['name' => 'Finie', 'template_id' => Template::value('id'), 'smtp_account_id' => SmtpAccount::value('id'), 'send_days' => [1], 'status' => 'completed']);
+
+    $this->get("/campagnes/{$campaign->id}/modifier")->assertRedirect(route('campaigns.show', $campaign));
+});

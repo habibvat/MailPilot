@@ -7,14 +7,17 @@
             <button type="button" wire:click="startCampaign({{ $campaign->id }})" wire:confirm="{{ __('Démarrer la campagne « :name » ?', ['name' => $campaign->name]) }}" class="btn-success{{ $size }}">{{ __('Démarrer') }}</button>
             @break
         @case('running')
+            <a href="{{ route('campaigns.edit', $campaign) }}" wire:navigate class="btn-secondary{{ $size }}">{{ __('Modifier') }}</a>
             <button type="button" wire:click="pauseCampaign({{ $campaign->id }})" class="btn-warning{{ $size }}">{{ __('Pause') }}</button>
             <button type="button" wire:click="stopCampaign({{ $campaign->id }})" wire:confirm="{{ __('Arrêter la campagne ?') }}" class="btn-danger{{ $size }}">{{ __('Arrêter') }}</button>
             @break
         @case('paused')
+            <a href="{{ route('campaigns.edit', $campaign) }}" wire:navigate class="btn-secondary{{ $size }}">{{ __('Modifier') }}</a>
             <button type="button" wire:click="resumeCampaign({{ $campaign->id }})" class="btn-success{{ $size }}">{{ __('Reprendre') }}</button>
             <button type="button" wire:click="stopCampaign({{ $campaign->id }})" wire:confirm="{{ __('Arrêter la campagne ?') }}" class="btn-danger{{ $size }}">{{ __('Arrêter') }}</button>
             @break
         @case('stopped')
+            <a href="{{ route('campaigns.edit', $campaign) }}" wire:navigate class="btn-secondary{{ $size }}">{{ __('Modifier') }}</a>
             <button type="button" wire:click="resumeCampaign({{ $campaign->id }})" wire:confirm="{{ __('Reprendre la campagne ? Assurez-vous d\'avoir corrigé la cause de l\'arrêt.') }}" class="btn-secondary{{ $size }}">{{ __('Reprendre') }}</button>
             @break
     @endswitch

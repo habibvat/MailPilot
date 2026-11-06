@@ -369,3 +369,27 @@ it('traite un refus définitif du destinataire comme un rebond', function () {
         ->and(Contact::first()->status)->toBe('bounced')
         ->and(Suppression::contains('contact1@societe1.dz'))->toBeTrue();
 });
+
+it('peut reprendre une campagne arrêtée par le taux de rebond, mesuré de nouveau à partir de la reprise', function () {
+    contacts(120);
+    $campaign = campaign();
+    $manager = app(CampaignManager::class);
+    $manager->start($campaign);
+
+    $sends = CampaignSend::orderBy('id')->get();
+    $sends->take(45)->each->update(['status' => 'sent', 'scheduled_at' => now(), 'sent_at' => now()]);
+    $sends->slice(45, 5)->each->update(['status' => 'bounced', 'scheduled_at' => now()]);
+    tick();
+    expect($campaign->fresh()->status)->toBe('stopped');
+
+    $this->travel(1)->minutes();
+    $manager->resume($campaign->fresh());
+    expect($campaign->fresh()->status)->toBe('running');
+
+    // Le nouveau taux ne porte que sur les envois planifiés après la reprise.
+    $sends->slice(50, 47)->each->update(['status' => 'sent', 'scheduled_at' => now(), 'sent_at' => now()]);
+    $sends->slice(97, 3)->each->update(['status' => 'bounced', 'scheduled_at' => now()]);
+    tick();
+    expect($campaign->fresh()->status)->toBe('stopped')
+        ->and($campaign->fresh()->stop_reason)->toContain('taux de rebond de 6,0 % sur 50 envois');
+});

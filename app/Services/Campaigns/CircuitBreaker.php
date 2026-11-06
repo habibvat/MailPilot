@@ -36,7 +36,12 @@ class CircuitBreaker
             return __('Disjoncteur : :max échecs SMTP consécutifs. Vérifiez le compte d\'envoi avant de reprendre.', ['max' => $max]);
         }
 
-        $counts = $campaign->sendCounts();
+        // Seuls les envois planifiés depuis la dernière reprise après arrêt sont pris en compte.
+        $counts = $campaign->sends()
+            ->when($campaign->breaker_reset_at, fn ($q, $since) => $q->where('scheduled_at', '>=', $since))
+            ->whereIn('status', ['sent', 'bounced'])
+            ->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status')->all()
+            + ['sent' => 0, 'bounced' => 0];
         $delivered = $counts['sent'] + $counts['bounced'];
         if ($delivered >= config('mailpilot.bounce_rate_min_sends') && $delivered > 0) {
             $rate = $counts['bounced'] / $delivered;
