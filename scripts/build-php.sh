@@ -51,8 +51,10 @@ fi
 ./spc build "$EXTENSIONS" --build-cli
 
 BIN="$WORK/buildroot/bin/php"
+# Liste lue une fois : « php -m | grep -q » échoue avec pipefail (SIGPIPE quand grep s'arrête).
+MODULES="$("$BIN" -m)"
 for ext in xmlreader xmlwriter zip gd pdo_sqlite; do
-    "$BIN" -m | grep -qix "$ext" || { echo "Extension manquante dans le binaire : $ext" >&2; exit 1; }
+    grep -qix "$ext" <<< "$MODULES" || { echo "Extension manquante dans le binaire : $ext" >&2; exit 1; }
 done
 
 rm -f "$OUT/php-$PHP_VERSION.zip"

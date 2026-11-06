@@ -39,7 +39,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
-          extensions: zip, gd, intl, sqlite3, pdo_sqlite
+          extensions: zip, gd, intl, fileinfo, sqlite3, pdo_sqlite
           tools: composer:v2
 
       - uses: actions/setup-node@v4
@@ -102,7 +102,8 @@ jobs:
           unzip -o -q nativephp/php-bin/bin/${{ matrix.os }}/${{ matrix.arch }}/php-$PHP_VERSION.zip -d "$RUNNER_TEMP/php-embedded"
           php_bin="$RUNNER_TEMP/php-embedded/php"; [ -f "$php_bin.exe" ] && php_bin="$php_bin.exe"
           "$php_bin" -v
-          "$php_bin" -d memory_limit=512M vendor/bin/pest
+          set -o pipefail
+          "$php_bin" -d memory_limit=512M vendor/bin/pest --colors=never 2>&1 | tee "$RUNNER_TEMP/tests.log"
 
       - name: Signature macOS
         if: matrix.os == 'mac'
@@ -154,7 +155,7 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          for f in "$RUNNER_TEMP/build-php.log" "$SPC_WORKDIR"/log/spc.output.log "$SPC_WORKDIR"/log/spc.shell.log "$RUNNER_TEMP/native-build.log"; do
+          for f in "$RUNNER_TEMP/build-php.log" "$SPC_WORKDIR"/log/spc.output.log "$SPC_WORKDIR"/log/spc.shell.log "$RUNNER_TEMP/tests.log" "$RUNNER_TEMP/native-build.log"; do
             [ -f "$f" ] || continue
             msg=$(tail -n 40 "$f" | perl -pe 's/\e\[[0-9;]*m//g; s/\r//g; s/%/%25/g; s/\n/%0A/g')
             echo "::error title=$(basename "$f")::$msg"
