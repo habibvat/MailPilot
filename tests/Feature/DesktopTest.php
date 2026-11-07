@@ -68,3 +68,11 @@ it('utilise le fuseau du système détecté au premier lancement, puis le garde'
     ($this->useDesktopTimezone)();
     expect(config('mailpilot.timezone'))->toBe('Asia/Tokyo');
 });
+
+it("lève la limite d'exécution des requêtes web pour le worker et le planificateur", function () {
+    set_time_limit(300);
+
+    (new AppServiceProvider($this->app))->register();
+
+    expect(ini_get('max_execution_time'))->toBe('0');
+});

@@ -26,6 +26,12 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(WilayaNormalizer::class);
         $this->app->scoped(EmailVerifier::class);
 
+        // max_execution_time = 300 (php/mailpilot.ini, phpIni() du desktop) vise les requêtes web :
+        // appliqué au worker de la file, il le tuerait toutes les 5 minutes, même pendant un job.
+        if ($this->app->runningInConsole()) {
+            set_time_limit(0);
+        }
+
         if (config('nativephp-internal.running')) {
             $this->useDesktopAppKey(config('nativephp-internal.storage_path'));
             $this->useDesktopTimezone(config('nativephp-internal.storage_path'));
