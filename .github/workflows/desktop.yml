@@ -117,16 +117,40 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: |
-          # electron-builder prend un CSC_LINK vide pour un chemin : on ne définit les
-          # variables de signature que si le certificat est fourni.
-          if [ -n "$CSC_LINK" ]; then
-            echo "MAC_SIGNED=true" >> "$GITHUB_ENV"
-            echo "CSC_LINK=$CSC_LINK" >> "$GITHUB_ENV"
-            echo "CSC_KEY_PASSWORD=$CSC_KEY_PASSWORD" >> "$GITHUB_ENV"
-          else
+          if [ -z "$CSC_LINK" ]; then
             echo "::warning::Secrets de signature absents : application macOS non signée."
             echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            exit 0
           fi
+
+          # Trousseau de signature préparé ici plutôt que par electron-builder : sa version
+          # 26.8.1 passe le mot de passe du .p12 à « set-key-partition-list » au lieu de celui
+          # du trousseau, ce qui échoue (SecKeychainUnlock) sur les runners macOS actuels.
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+          echo "::add-mask::$keychain_password"
+          printf '%s' "$CSC_LINK" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/certificate.p12"
+
+          identity="$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')"
+          [ -n "$identity" ] || { echo "::error::Aucun certificat « Developer ID Application » dans CSC_LINK."; exit 1; }
+          echo "Identité de signature : $identity"
+
+          # electron-builder signe avec ce trousseau ; CSC_LINK n'est volontairement pas transmis.
+          {
+            echo "MAC_SIGNED=true"
+            echo "CSC_KEYCHAIN=$keychain"
+            echo "CSC_NAME=${identity#Developer ID Application: }"
+          } >> "$GITHUB_ENV"
 
       # native:build ne renvoie pas toujours d'erreur quand electron-builder échoue :
       # on vérifie que des installeurs ont bien été produits.
@@ -156,6 +180,11 @@ jobs:
 
       # Les logs d'Actions ne sont lisibles qu'authentifié : en cas d'échec, la fin du log
       # de compilation est publiée en annotation, visible sur la page du run.
+      - name: Suppression du trousseau de signature
+        if: always() && env.CSC_KEYCHAIN != ''
+        shell: bash
+        run: security delete-keychain "$CSC_KEYCHAIN" || true
+
       - name: Résumé de l'échec
         if: failure()
         shell: bash
