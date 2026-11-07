@@ -173,6 +173,7 @@
     "Fin d'envoi": "Sending ends",
     "Formats acceptés : CSV, XLSX ou XLS.": "Accepted formats: CSV, XLSX or XLS.",
     "Fuseau horaire : :timezone.": "Time zone: :timezone.",
+    "Fuseau horaire des envois et des dates : :timezone, celui de votre ordinateur au premier lancement de MailPilot.": "Time zone for sending and dates: :timezone, your computer's time zone when MailPilot was first launched.",
     "Fuseau horaire des envois et des dates : :timezone. Il est détecté au premier lancement ; pour le changer, modifiez APP_TIMEZONE dans le fichier .env puis relancez MailPilot.": "Time zone for sending windows and dates: :timezone. It is detected on first launch; to change it, edit APP_TIMEZONE in the .env file and restart MailPilot.",
     "Générer depuis le HTML": "Generate from HTML",
     "Harmoniser les wilayas algériennes à l'import": "Normalise Algerian wilayas on import",

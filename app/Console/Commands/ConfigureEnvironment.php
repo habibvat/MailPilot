@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\SystemTimezone;
 use Illuminate\Console\Command;
 
 /**
@@ -23,24 +24,12 @@ class ConfigureEnvironment extends Command
             return self::FAILURE;
         }
 
-        $timezone = $this->systemTimezone();
+        $timezone = SystemTimezone::detect();
         file_put_contents($path, $this->set(file_get_contents($path), 'APP_TIMEZONE', $timezone));
 
         $this->info("Fuseau horaire : $timezone");
 
         return self::SUCCESS;
-    }
-
-    private function systemTimezone(): string
-    {
-        // ICU lit le fuseau du système (macOS, Linux et Windows) et le renvoie au format IANA.
-        $timezone = class_exists(\IntlTimeZone::class) ? \IntlTimeZone::createDefault()->getID() : null;
-
-        if (! $timezone && is_link('/etc/localtime')) {
-            $timezone = preg_replace('#^.*/zoneinfo/#', '', (string) readlink('/etc/localtime'));
-        }
-
-        return in_array($timezone, timezone_identifiers_list(), true) ? $timezone : 'UTC';
     }
 
     private function set(string $env, string $key, string $value): string

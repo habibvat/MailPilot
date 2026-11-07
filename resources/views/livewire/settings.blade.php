@@ -60,7 +60,11 @@
     <form wire:submit="saveRegional" class="card card-body mb-6 space-y-5">
         <div>
             <h2 class="text-sm font-semibold text-slate-900">{{ __('Préférences régionales') }}</h2>
-            <p class="mt-1 text-sm text-slate-500">{{ __('Fuseau horaire des envois et des dates : :timezone. Il est détecté au premier lancement ; pour le changer, modifiez APP_TIMEZONE dans le fichier .env puis relancez MailPilot.', ['timezone' => config('mailpilot.timezone')]) }}</p>
+            @if (config('nativephp-internal.running'))
+                <p class="mt-1 text-sm text-slate-500">{{ __('Fuseau horaire des envois et des dates : :timezone, celui de votre ordinateur au premier lancement de MailPilot.', ['timezone' => config('mailpilot.timezone')]) }}</p>
+            @else
+                <p class="mt-1 text-sm text-slate-500">{{ __('Fuseau horaire des envois et des dates : :timezone. Il est détecté au premier lancement ; pour le changer, modifiez APP_TIMEZONE dans le fichier .env puis relancez MailPilot.', ['timezone' => config('mailpilot.timezone')]) }}</p>
+            @endif
         </div>
         <div>
             <label class="label">{{ __('Jours d\'envoi proposés pour une nouvelle campagne') }}</label>

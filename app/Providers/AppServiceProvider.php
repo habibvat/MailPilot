@@ -9,6 +9,7 @@ use App\Services\Dns\NativeDnsResolver;
 use App\Services\EmailVerifier;
 use App\Services\Mail\SmtpTransportFactory;
 use App\Support\Locale;
+use App\Support\SystemTimezone;
 use App\Support\WilayaNormalizer;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Queue\Events\JobProcessing;
@@ -27,7 +28,28 @@ class AppServiceProvider extends ServiceProvider
 
         if (config('nativephp-internal.running')) {
             $this->useDesktopAppKey(config('nativephp-internal.storage_path'));
+            $this->useDesktopTimezone(config('nativephp-internal.storage_path'));
         }
+    }
+
+    /**
+     * Application desktop : le .env embarqué est en lecture seule et contient UTC, donc
+     * mailpilot:configure-env ne peut pas s'appliquer. Comme lui, on détecte le fuseau du
+     * système au premier lancement puis on le garde : les dates sont enregistrées en heure
+     * locale, elles seraient décalées si le fuseau changeait ensuite.
+     */
+    protected function useDesktopTimezone(string $storagePath): void
+    {
+        $path = $storagePath.DIRECTORY_SEPARATOR.'timezone';
+        $timezone = is_file($path) ? trim(file_get_contents($path)) : null;
+
+        if (! in_array($timezone, timezone_identifiers_list(), true)) {
+            $timezone = SystemTimezone::detect();
+            @file_put_contents($path, $timezone);
+        }
+
+        config(['app.timezone' => $timezone, 'mailpilot.timezone' => $timezone]);
+        date_default_timezone_set($timezone);
     }
 
     /**

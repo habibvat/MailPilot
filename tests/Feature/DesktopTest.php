@@ -1,6 +1,7 @@
 <?php
 
 use App\Providers\AppServiceProvider;
+use App\Support\SystemTimezone;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Encryption\Encrypter;
 use Illuminate\Support\Facades\Crypt;
@@ -9,10 +10,15 @@ beforeEach(function () {
     $this->storage = sys_get_temp_dir().'/mailpilot-desktop-'.bin2hex(random_bytes(4));
     $this->useDesktopKey = fn () => (fn ($path) => $this->useDesktopAppKey($path))
         ->call(new AppServiceProvider($this->app), $this->storage);
+    $this->useDesktopTimezone = fn () => (fn ($path) => $this->useDesktopTimezone($path))
+        ->call(new AppServiceProvider($this->app), $this->storage);
+    $this->defaultTimezone = date_default_timezone_get();
 });
 
 afterEach(function () {
+    date_default_timezone_set($this->defaultTimezone);
     @unlink($this->storage.'/app.key');
+    @unlink($this->storage.'/timezone');
     @rmdir($this->storage);
 });
 
@@ -43,4 +49,22 @@ it("chiffre les mots de passe SMTP avec la clé de l'installation, pas celle du 
     expect(Crypt::decryptString($encrypted))->toBe('secret')
         ->and(fn () => (new Encrypter($bundled, config('app.cipher')))->decryptString($encrypted))
         ->toThrow(DecryptException::class);
+});
+
+it('utilise le fuseau du système détecté au premier lancement, puis le garde', function () {
+    @mkdir($this->storage, 0700, true);
+    config(['app.timezone' => 'UTC', 'mailpilot.timezone' => 'UTC']);
+
+    ($this->useDesktopTimezone)();
+    $detected = SystemTimezone::detect();
+
+    expect(config('mailpilot.timezone'))->toBe($detected)
+        ->and(config('app.timezone'))->toBe($detected)
+        ->and(date_default_timezone_get())->toBe($detected)
+        ->and(file_get_contents($this->storage.'/timezone'))->toBe($detected);
+
+    // Les dates sont enregistrées en heure locale : le fuseau retenu ne change plus ensuite.
+    file_put_contents($this->storage.'/timezone', 'Asia/Tokyo');
+    ($this->useDesktopTimezone)();
+    expect(config('mailpilot.timezone'))->toBe('Asia/Tokyo');
 });
