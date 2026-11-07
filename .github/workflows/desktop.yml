@@ -13,8 +13,11 @@ on:
   workflow_dispatch:
   push:
     tags: ['v*']
-    # TEMPORAIRE : validation de la branche, à retirer avant la fusion dans main.
-    branches: [feature/desktop]
+
+# Un nouveau lancement sur la même branche ou le même tag annule le précédent.
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   # Doit rester aligné sur config.platform.php (composer.json).
@@ -175,3 +178,5 @@ jobs:
             nativephp/electron/dist/*.AppImage
             nativephp/electron/dist/*.deb
           if-no-files-found: error
+          # Environ 650 Mo par lancement : les installeurs d'une release vont dans la release.
+          retention-days: 7
