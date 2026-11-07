@@ -22,6 +22,7 @@ au premier lancement. Des règles propres à l'Algérie (wilayas, numéros de t�
 - [Prérequis](#prérequis)
 - [Installation](#installation)
 - [Démarrage](#démarrage)
+- [Application desktop](#application-desktop)
 - [Premier paramétrage](#premier-paramétrage)
 - [Langues et préférences régionales](#langues-et-préférences-régionales)
 - [Fonctionnement](#fonctionnement)
@@ -93,6 +94,34 @@ votre installation de PHP.
 > planificateur, aucune campagne n'envoie.
 
 L'application refuse toute requête qui ne vient pas de la machine locale (middleware `EnsureLocalRequest`).
+
+## Application desktop
+
+MailPilot existe aussi en application desktop (macOS Apple Silicon, Windows x64, Linux x64), construite avec
+[NativePHP](https://nativephp.com). Rien d'autre à installer : PHP, le worker et le planificateur sont inclus et
+démarrent avec la fenêtre.
+
+Les installeurs sont produits par le workflow GitHub Actions **Desktop**, lancé sur les tags `v*` ou à la main.
+Téléchargez-les dans la section *Artifacts* de l'exécution ; ils sont conservés 7 jours.
+
+| Système | Installation |
+|---|---|
+| macOS | ouvrez le `.dmg` et glissez MailPilot dans Applications (signée et notarisée par Apple) |
+| Windows | lancez le `.exe` ; l'installeur n'est pas signé : dans l'avertissement SmartScreen, cliquez sur *Informations complémentaires* puis *Exécuter quand même* |
+| Linux | `chmod +x MailPilot-*.AppImage` puis lancez-le, ou installez le `.deb` |
+
+Différences avec la version web :
+
+- les données sont dans votre dossier utilisateur, pas dans `database/` : `~/Library/Application Support/mailpilot`
+  (macOS), `%APPDATA%\mailpilot` (Windows), `~/.config/mailpilot` (Linux). L'application desktop démarre avec une
+  base vide, distincte de celle de la version web ;
+- chaque installation crée sa propre clé de chiffrement (`storage/app.key` dans ce dossier) pour les mots de passe
+  SMTP et IMAP ;
+- le fuseau horaire est celui de l'ordinateur au premier lancement, puis il ne change plus (visible dans Paramètres).
+
+Pour construire les installeurs vous-même, voir `.github/workflows/desktop.yml` : le binaire PHP est compilé avec
+[static-php-cli](https://github.com/crazywhalecc/static-php-cli) (`scripts/build-php.sh`, `scripts/build-php.ps1`),
+puis `php artisan native:build`.
 
 ## Premier paramétrage
 
@@ -318,6 +347,9 @@ cette clé, une sauvegarde de la base reste lisible, mais les mots de passe des 
 
 Pour restaurer : arrêtez l'application, remplacez `database/database.sqlite` (supprimez les éventuels `-wal`/`-shm`),
 puis relancez. La commande `php artisan migrate` du script de démarrage met le schéma à jour si besoin.
+
+**Application desktop** : même principe avec `database/database.sqlite` et `storage/app.key` du dossier de données
+(voir [Application desktop](#application-desktop)) ; quittez MailPilot avant de les copier.
 
 ## Utiliser MySQL au lieu de SQLite
 

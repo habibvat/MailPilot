@@ -23,6 +23,7 @@ available as options.
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Starting the app](#starting-the-app)
+- [Desktop app](#desktop-app)
 - [First-time setup](#first-time-setup)
 - [Languages and regional preferences](#languages-and-regional-preferences)
 - [How it works](#how-it-works)
@@ -95,6 +96,33 @@ installation.
 > campaign sends anything.
 
 The application rejects any request that does not come from the local machine (`EnsureLocalRequest` middleware).
+
+## Desktop app
+
+MailPilot also runs as a desktop application (macOS Apple Silicon, Windows x64, Linux x64), built with
+[NativePHP](https://nativephp.com). There is nothing else to install: PHP, the worker and the scheduler are bundled and
+start with the window.
+
+The installers are built by the **Desktop** GitHub Actions workflow, which runs on `v*` tags or by hand. Download them
+from the *Artifacts* section of the run; they are kept for 7 days.
+
+| System | Installation |
+|---|---|
+| macOS | open the `.dmg` and drag MailPilot into Applications (signed and notarized by Apple) |
+| Windows | run the `.exe`; the installer is not signed, so in the SmartScreen warning click *More info* then *Run anyway* |
+| Linux | `chmod +x MailPilot-*.AppImage` then run it, or install the `.deb` |
+
+Differences from the web version:
+
+- data lives in your user folder, not in `database/`: `~/Library/Application Support/mailpilot` (macOS),
+  `%APPDATA%\mailpilot` (Windows), `~/.config/mailpilot` (Linux). The desktop app starts with an empty database,
+  separate from the web version's;
+- each installation creates its own encryption key (`storage/app.key` in that folder) for SMTP and IMAP passwords;
+- the time zone is the computer's on first launch, then stays the same (shown in Settings).
+
+To build the installers yourself, see `.github/workflows/desktop.yml`: the PHP binary is compiled with
+[static-php-cli](https://github.com/crazywhalecc/static-php-cli) (`scripts/build-php.sh`, `scripts/build-php.ps1`),
+then `php artisan native:build`.
 
 ## First-time setup
 
@@ -312,6 +340,9 @@ database backup is still readable, but account passwords will have to be entered
 
 To restore: stop the app, replace `database/database.sqlite` (delete any `-wal`/`-shm` files), then start it again.
 The `php artisan migrate` run by the start script updates the schema if needed.
+
+**Desktop app**: the same applies to `database/database.sqlite` and `storage/app.key` in the data folder (see
+[Desktop app](#desktop-app)); quit MailPilot before copying them.
 
 ## Using MySQL instead of SQLite
 
