@@ -79,6 +79,8 @@ jobs:
 
       - run: composer install --no-interaction --prefer-dist
       - run: npm ci
+      # Assets Vite : nécessaires aux tests qui affichent des pages (et à l'application).
+      - run: npm run build
 
       - name: Préparation du .env et de la version
         shell: bash
